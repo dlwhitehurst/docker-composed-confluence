@@ -1,0 +1,67 @@
+version: '2'
+
+services:
+  nginx:
+    image: nginx:1.15-alpine
+    container_name: my_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./data/nginx:/etc/nginx/conf.d
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+    links:
+      - confluence:app 
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"    
+  certbot:
+    image: certbot/certbot
+    restart: unless-stopped
+    volumes:
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+  confluence:
+    image: eugenmayer/confluence:latest
+    container_name: my_confluence
+    volumes:
+      - confluencedata:/var/atlassian/confluence
+    links:
+      -  postgresql:db
+    ports:
+      - '8090:8090'
+      - '8091:8091'
+    environment:
+      - CONFLUENCE_DB_HOST=db
+      - CONFLUENCE_DB_PORT=5432
+      - CATALINA_OPTS=-Xms256m -Xmx1g
+      - CONFLUENCE_PROXY_NAME=confluence.ciwise.com
+      - CONFLUENCE_PROXY_PORT=443
+      - CONFLUENCE_PROXY_SCHEME=https
+      - CONFLUENCE_DELAYED_START=
+      - CONFLUENCE_CONFIG_PROPERTY1=hibernate.connection.driver_class
+      - CONFLUENCE_CONFIG_VALUE1=org.postgresql.Driver
+      - CONFLUENCE_CONFIG_PROPERTY2=hibernate.connection.password
+      - CONFLUENCE_CONFIG_VALUE2=abc123
+      - CONFLUENCE_CONFIG_PROPERTY3=hibernate.connection.url
+      - CONFLUENCE_CONFIG_VALUE3=jdbc:postgresql://db:5432/confluence
+      - CONFLUENCE_CONFIG_PROPERTY4=hibernate.connection.username
+      - CONFLUENCE_CONFIG_VALUE4=confluenceuser
+  postgresql:
+    image: blacklabelops/postgres
+    container_name: my_postgres
+    volumes:
+      - postgresqldata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=confluenceuser
+      - POSTGRES_PASSWORD=abc123
+      - POSTGRES_DB=confluence
+      - POSTGRES_ENCODING=UTF8
+      - POSTGRES_COLLATE=C
+      - POSTGRES_COLLATE_TYPE=C
+volumes:
+  confluencedata:
+    external: false
+  postgresqldata:
+    external: false
